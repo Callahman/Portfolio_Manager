@@ -1,0 +1,27 @@
+# environment
+.env
+.venv/
+venv/
+
+# generated state (segregated storage — never committed)
+collect/raw/
+validate/validated/
+analyze/analytics/
+history/
+archives/
+reports/
+portfolio/*.db
+portfolio/*.db-journal
+portfolio/*.db-wal
+portfolio/*.db-shm
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# local scratch
+*.log
+.DS_Store

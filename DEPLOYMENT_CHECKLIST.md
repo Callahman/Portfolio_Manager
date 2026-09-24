@@ -40,29 +40,29 @@ once the Epic 0 scaffolding exists.
 
 ### Story 0.1 — Repository & private remote
 
-- [ ] Create the repo (`git init`) and connect the private remote
-- [ ] Add `.gitignore` (`.env`, `.venv/`, `warehouse/`, `history/`, `archives/`, generated state)
-- [ ] Add `.env.example` with all variables from Appendix B (watchlist, FRED series, news feeds, API/dashboard bind, WOL config, portfolio settings, session/pod limits, history window, auto-pull, smoke test, self-mod escalation, remote URL, SMTP, archive cap)
+- [x] Create the repo (`git init`) and connect the private remote
+- [x] Add `.gitignore` (`.env`, `.venv/`, `warehouse/`, `history/`, `archives/`, generated state)
+- [x] Add `.env.example` with all variables from Appendix B (watchlist, FRED series, news feeds, API/dashboard bind, WOL config, portfolio settings, session/pod limits, history window, auto-pull, smoke test, self-mod escalation, remote URL, SMTP, archive cap)
 - [ ] Verify push/pull round trip: push from the 4090, pull on the 1080
 
 ### Story 0.2 — Segregated package layout
 
-- [ ] Create the top-level layout: `collect/`, `validate/`, `analyze/`, `portfolio/`, `delivery/`, `api/`, `team/`, `history/`, `archives/`, `reports/`, `systemd/`, `workflows/`
-- [ ] Make each of `collect/`, `validate/`, `analyze/` an independent Python package with its own storage schema (`warehouse/raw`, `warehouse/validated`, `warehouse/analytics`)
+- [x] Create the top-level layout: `collect/`, `validate/`, `analyze/`, `portfolio/`, `delivery/`, `api/`, `team/`, `history/`, `archives/`, `reports/`, `systemd/`, `workflows/`
+- [x] Make each of `collect/`, `validate/`, `analyze/` an independent Python package with its own storage schema (`warehouse/raw`, `warehouse/validated`, `warehouse/analytics`)
 
 ### Story 0.3 — Python environment
 
-- [ ] Create the Python venv
-- [ ] Pin `requirements.txt` (requests/httpx, pandas, pyarrow, fastapi/flask, python-dotenv)
+- [x] Create the Python venv
+- [x] Pin `requirements.txt` (requests/httpx, pandas, pyarrow, fastapi/flask, python-dotenv)
 
 ### Story 0.4 — 4090 machine verification
 
-- [ ] Verify the DeepSeek harness (Qwen 3.8, already installed) runs a session against a fixture feed
-- [ ] Confirm the repo checkout is writable by the harness
+- [x] Verify the DeepSeek harness (Qwen 3.8, already installed) runs a session against a fixture feed
+- [x] Confirm the repo checkout is writable by the harness
 
 ### Story 0.5 — 1080 machine verification
 
-- [ ] Confirm no LLM of any kind is installed/running (deterministic-only by design)
+- [x] Confirm no LLM of any kind is installed/running (deterministic-only by design)
 
 ### Story 0.6 — Pi (always-on) WOL verification
 
@@ -81,32 +81,32 @@ once the Epic 0 scaffolding exists.
 
 ### Story 1.1 — Prices fetcher
 
-- [ ] Implement the primary free equity price source (e.g. Yahoo Finance via an unofficial client)
-- [ ] Implement the fallback source (e.g. stooq)
-- [ ] Support the configurable watchlist (holdings + candidates + SPY benchmark)
-- [ ] Add retry + error reporting to the fetcher
+- [x] Implement the primary free equity price source (e.g. Yahoo Finance via an unofficial client)
+- [x] Implement the fallback source (e.g. stooq)
+- [x] Support the configurable watchlist (holdings + candidates + SPY benchmark)
+- [x] Add retry + error reporting to the fetcher
 
 ### Story 1.2 — Macro fetcher (FRED)
 
-- [ ] Implement the FRED public API fetcher for the configurable series list (rates, CPI, unemployment, etc.)
-- [ ] Add retry + error reporting to the fetcher
+- [x] Implement the FRED public API fetcher for the configurable series list (rates, CPI, unemployment, etc.)
+- [x] Add retry + error reporting to the fetcher
 
 ### Story 1.3 — News fetcher
 
-- [ ] Implement the RSS feed fetcher (markets, economics, sectors)
-- [ ] Implement the light web crawl of the small set of allowlisted free pages
-- [ ] Store headlines + snippets
+- [x] Implement the RSS feed fetcher (markets, economics, sectors)
+- [x] Implement the light web crawl of the small set of allowlisted free pages
+- [x] Store headlines + snippets
 
 ### Story 1.4 — Raw storage
 
-- [ ] Write parquet/CSV snapshots per fetch to `warehouse/raw/` (its own schema)
-- [ ] Record SQLite metadata per fetch (source, fetched-at, row count, status)
+- [x] Write parquet/CSV snapshots per fetch to `warehouse/raw/` (its own schema)
+- [x] Record SQLite metadata per fetch (source, fetched-at, row count, status)
 
 ### Story 1.5 — Scheduling
 
-- [ ] systemd timer: prices a few times daily (around market hours)
-- [ ] systemd timer: macro daily
-- [ ] systemd timer: news every 1–2 hours
+- [x] systemd timer: prices a few times daily (around market hours)
+- [x] systemd timer: macro daily
+- [x] systemd timer: news every 1–2 hours
 
 **Definition of Done (Epic 1)**
 
@@ -119,18 +119,18 @@ once the Epic 0 scaffolding exists.
 
 ### Story 2.1 — Quality checks per source
 
-- [ ] Completeness checks per source
-- [ ] Staleness checks per source
-- [ ] Schema checks per source
-- [ ] Write cleaned/verified records + validation metadata to `warehouse/validated/` (its own schema)
+- [x] Completeness checks per source
+- [x] Staleness checks per source
+- [x] Schema checks per source
+- [x] Write cleaned/verified records + validation metadata to `warehouse/validated/` (its own schema)
 
 ### Story 2.2 — Data quality report
 
-- [ ] Emit a machine-readable data quality report per run (coverage, staleness, failures)
+- [x] Emit a machine-readable data quality report per run (coverage, staleness, failures)
 
 ### Story 2.3 — Structured failure reports
 
-- [ ] Emit structured failure reports for any unrecovered failure (error class, stage, source, log excerpt, first/last occurrence) — the input to the self-modification loop (Epic 9)
+- [x] Emit structured failure reports for any unrecovered failure (error class, stage, source, log excerpt, first/last occurrence) — the input to the self-modification loop (Epic 9)
 
 **Definition of Done (Epic 2)**
 
@@ -143,33 +143,33 @@ once the Epic 0 scaffolding exists.
 
 ### Story 3.1 — Market snapshot
 
-- [ ] Compute price moves, volume, sector performance, notable movers, macro indicator readings
+- [x] Compute price moves, volume, sector performance, notable movers, macro indicator readings
 
 ### Story 3.2 — Statistical signals
 
-- [ ] Compute correlations, volatility, trend detection
-- [ ] Maintain signal history with forward-return stats
+- [x] Compute correlations, volatility, trend detection
+- [x] Maintain signal history with forward-return stats
 
 ### Story 3.3 — Fundamentals
 
-- [ ] Compute earnings, valuations, sector rotation, ticker-specific news/events
+- [x] Compute earnings, valuations, sector rotation, ticker-specific news/events (sector rotation + ticker news/events done; earnings/valuations deferred as documented data gaps — see `analyze/fundamentals.py`)
 
 ### Story 3.4 — Macro readings
 
-- [ ] Compute FRED series values, upcoming releases, policy news
+- [x] Compute FRED series values, upcoming releases, policy news
 
 ### Story 3.5 — Risk metrics
 
-- [ ] Compute portfolio risk, position/sector exposure, tail stats, proposed-limit checks
+- [x] Compute portfolio risk, position/sector exposure, tail stats, proposed-limit checks
 
 ### Story 3.6 — Per-role feed assembly (`feeds.py`)
 
-- [ ] Assemble each role's bounded feed from the analytics (the `/feeds/{role}` payloads)
-- [ ] Enforce the per-role data tier (raw / derived / briefs) so a role can never be handed data outside its tier
+- [x] Assemble each role's bounded feed from the analytics (the `/feeds/{role}` payloads)
+- [x] Enforce the per-role data tier (raw / derived / briefs) so a role can never be handed data outside its tier
 
 ### Story 3.7 — Analytics storage
 
-- [ ] Write all five analytics to `warehouse/analytics/` (its own schema)
+- [x] Write all five analytics to `warehouse/analytics/` (its own schema)
 
 **Definition of Done (Epic 3)**
 
@@ -182,20 +182,20 @@ once the Epic 0 scaffolding exists.
 
 ### Story 4.1 — Read endpoints
 
-- [ ] `GET /feeds/{role}` — per-role feeds (market snapshot, statistical signals, fundamentals, macro readings, risk metrics, derived briefs)
-- [ ] `GET /quality` — data quality report
-- [ ] `GET /failures` — structured failure reports
-- [ ] `GET /history` — conversation history (rolling window)
+- [x] `GET /feeds/{role}` — per-role feeds (market snapshot, statistical signals, fundamentals, macro readings, risk metrics, derived briefs)
+- [x] `GET /quality` — data quality report
+- [x] `GET /failures` — structured failure reports
+- [x] `GET /history` — conversation history (rolling window)
 
 ### Story 4.2 — Write endpoint
 
-- [ ] `POST /recommendation` — the only write endpoint: accepts a team recommendation, applies it to the paper portfolio, triggers delivery
+- [x] `POST /recommendation` — the only write endpoint: accepts a team recommendation, applies it to the paper portfolio, triggers delivery
 
 ### Story 4.3 — Service hardening
 
 - [ ] systemd service for the API
-- [ ] Health endpoint
-- [ ] Request logging
+- [x] Health endpoint
+- [x] Request logging
 
 **Definition of Done (Epic 4)**
 
@@ -245,27 +245,27 @@ once the Epic 0 scaffolding exists.
 
 ### Story 6.1 — SQLite schema
 
-- [ ] Positions table (ticker, shares, avg cost)
-- [ ] Cash balance
-- [ ] Trade log
-- [ ] Daily mark-to-market values
+- [x] Positions table (ticker, shares, avg cost)
+- [x] Cash balance
+- [x] Trade log
+- [x] Daily mark-to-market values
 
 ### Story 6.2 — Seed
 
-- [ ] Seed from `.env`: starting balance in the $5k–$10k regime (`PORTFOLIO_START_BALANCE`, default $10,000)
-- [ ] Optional starting positions (`PORTFOLIO_START_POSITIONS`)
+- [x] Seed from `.env`: starting balance in the $5k–$10k regime (`PORTFOLIO_START_BALANCE`, default $10,000)
+- [x] Optional starting positions (`PORTFOLIO_START_POSITIONS`)
 
 ### Story 6.3 — Paper execution
 
-- [ ] Apply a recommendation (list of actions + sizing) at close prices
-- [ ] Apply the assumed transaction cost (`TX_COST_BPS`) so churn is visible in the P&L
-- [ ] Fractional-share handling
-- [ ] Record each decision with the recommendation's rationale
+- [x] Apply a recommendation (list of actions + sizing) at close prices
+- [x] Apply the assumed transaction cost (`TX_COST_BPS`) so churn is visible in the P&L
+- [x] Fractional-share handling
+- [x] Record each decision with the recommendation's rationale
 
 ### Story 6.4 — Daily marks + evaluation metrics
 
 - [ ] systemd timer for the daily mark-to-market job
-- [ ] Compute metrics vs the SPY benchmark: cumulative return, max drawdown, Sharpe ratio, trade count/turnover
+- [x] Compute metrics vs the SPY benchmark: cumulative return, max drawdown, Sharpe ratio, trade count/turnover
 
 **Definition of Done (Epic 6)**
 
@@ -284,24 +284,24 @@ once the Epic 0 scaffolding exists.
 
 ### Story 7.2 — Report generation
 
-- [ ] Generate the markdown report to `reports/`: data quality summary, each role's analysis, deliberation highlights, final recommendation, paper-portfolio impact
+- [x] Generate the markdown report to `reports/`: data quality summary, each role's analysis, deliberation highlights, final recommendation, paper-portfolio impact
 
 ### Story 7.3 — Email delivery
 
-- [ ] SMTP email on completed runs
-- [ ] SMTP email on run failures
+- [x] SMTP email on completed runs
+- [x] SMTP email on run failures
 
 ### Story 7.4 — Web dashboard
 
-- [ ] Pipeline status view (last run, stages, next scheduled run)
+- [x] Pipeline status view (last run, stages, next scheduled run)
 - [ ] 4090 reachability view (informational only)
-- [ ] Data freshness per source
-- [ ] Team conversation/ideation transcript view (ad-hoc sessions)
+- [x] Data freshness per source
+- [x] Team conversation/ideation transcript view (ad-hoc sessions)
 - [ ] Conversation-history audit view (per-session history, rolling window, decision journal)
-- [ ] Latest recommendation + its history
-- [ ] Paper-portfolio P&L, positions, trades, benchmark comparison
-- [ ] Failure alerts
-- [ ] Confirm there is **no ad-hoc trigger** (sessions start on the 4090 harness)
+- [x] Latest recommendation + its history
+- [x] Paper-portfolio P&L, positions, trades, benchmark comparison
+- [x] Failure alerts
+- [x] Confirm there is **no ad-hoc trigger** (sessions start on the 4090 harness)
 
 ### Story 7.5 — Conversation history
 
@@ -404,7 +404,7 @@ once the Epic 0 scaffolding exists.
 
 ### Story 11.1 — External dependency hardening
 
-- [ ] Retries, timeouts, and degradation paths for every external dependency (sources, SMTP, dashboard, API) — visible failure state, never silent
+- [x] Retries, timeouts, and degradation paths for every external dependency (sources, SMTP, dashboard, API) — visible failure state, never silent
 
 ### Story 11.2 — Storage maintenance
 
@@ -482,7 +482,7 @@ working through the relevant epics:
 
 - [ ] **Hallucinated data** (Epic 5): roles receive only 1080 feeds; outputs require references to data keys/fields; a validation pass checks numeric claims against the warehouse
 - [ ] **Context-window limits** (Epic 5): bounded feeds, round caps, deterministic truncation
-- [ ] **Free data-source fragility** (Epic 1): fallback source per data type, caching, staleness thresholds, visible failures
+- [x] **Free data-source fragility** (Epic 1): fallback source per data type, caching, staleness thresholds, visible failures (fallback implemented for prices; caching/staleness/visible failures for all sources)
 - [ ] **Deliberation non-convergence** (Epic 5): hard round budget, Team Lead close authority, deadlock detection, final recommendation always produced
 - [ ] **Overtrading** (Epic 6): transaction costs on every trade, turnover limits in the PM mandate, Risk Manager turnover checks, trade count/turnover as a first-class metric
 - [ ] **Dashboard/API/email exposure** (Epic 4, 7): LAN-only bind, non-guessable port/path; shared-token auth planned early (see §5.7)

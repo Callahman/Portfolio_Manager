@@ -1,0 +1,12 @@
+[Unit]
+Description=Portfolio Manager - collect macro (FRED, 1080)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/portfolio_manager
+ExecStart=/opt/portfolio_manager/.venv/bin/python -m collect.runner macro
+
+[Install]
+WantedBy=multi-user.target

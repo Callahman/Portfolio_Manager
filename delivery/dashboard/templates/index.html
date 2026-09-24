@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portfolio Manager</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; background: #0f1115; color: #e6e6e6; }
+  h1 { font-size: 1.3rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1rem; }
+  .card { background: #181b22; border: 1px solid #262b36; border-radius: 10px; padding: 1rem; }
+  .card h2 { font-size: 1rem; margin-top: 0; color: #9ecbff; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { text-align: left; padding: .25rem .4rem; border-bottom: 1px solid #232833; }
+  .ok { color: #7bd88f; } .stale { color: #e5c07b; } .failed { color: #e57b7b; }
+  .muted { color: #8a93a5; font-size: .8rem; }
+  pre { white-space: pre-wrap; font-size: .8rem; max-height: 260px; overflow: auto; }
+  .note { font-size: .8rem; color: #8a93a5; margin-top: .5rem; }
+</style>
+</head>
+<body>
+<h1>Portfolio Manager — dashboard <span class="muted">(informational only; no ad-hoc trigger — sessions start on the 4090 harness)</span></h1>
+<div class="grid">
+  <div class="card"><h2>Pipeline status</h2><div id="status" class="muted">loading…</div></div>
+  <div class="card"><h2>Data freshness</h2><div id="freshness" class="muted">loading…</div></div>
+  <div class="card"><h2>Paper portfolio</h2><div id="portfolio" class="muted">loading…</div></div>
+  <div class="card"><h2>Failures</h2><div id="failures" class="muted">loading…</div></div>
+  <div class="card"><h2>Latest recommendation</h2><div id="rec" class="muted">loading…</div></div>
+  <div class="card"><h2>Conversation history</h2><div id="history" class="muted">loading…</div></div>
+</div>
+
+<script>
+async function j(url) { try { return await (await fetch(url)).json(); } catch (e) { return {error: String(e)}; } }
+function cls(s) { return s === 'ok' ? 'ok' : s === 'stale' ? 'stale' : 'failed'; }
+
+(async () => {
+  const st = await j('/api/status');
+  document.getElementById('status').innerHTML =
+    'quality report: ' + (st.quality_report_at || 'none') + '<br>' +
+    'coverage: ' + JSON.stringify(st.coverage || {}) + '<br><br>' +
+    '<table><tr><th>source</th><th>rows</th><th>status</th></tr>' +
+    (st.recent_fetches || []).map(f =>
+      `<tr><td>${f.source}</td><td>${f.rows}</td><td class="${cls(f.status)}">${f.status}</td></tr>`).join('') +
+    '</table>';
+
+  const fr = await j('/api/freshness');
+  document.getElementById('freshness').innerHTML =
+    '<table><tr><th>source</th><th>latest</th><th>status</th></tr>' +
+    Object.entries(fr.sources || {}).map(([s, r]) =>
+      `<tr><td>${s}</td><td>${r.latest || '—'}</td><td class="${cls(r.status)}">${r.status}</td></tr>`).join('') +
+    '</table>';
+
+  const pf = await j('/api/portfolio');
+  const m = pf.metrics || {};
+  const b = m.benchmark || {};
+  document.getElementById('portfolio').innerHTML =
+    (m.available ?
+      'total: $' + m.total + ' (as of ' + m.as_of + ')<br>' +
+      'cum return: ' + m.cumulative_return_pct + '% (bench ' + b.cumulative_return_pct + '%, excess ' + b.excess_return_pct + '%)<br>' +
+      'max DD: ' + m.max_drawdown_pct + '% (bench ' + b.max_drawdown_pct + '%)<br>' +
+      'Sharpe: ' + m.sharpe_ann + ' · trades: ' + m.n_trades + ' · turnover: ' + m.turnover + '<br><br>' :
+      'no marks yet<br><br>') +
+    '<table><tr><th>pos</th><th>shares</th></tr>' +
+    (pf.positions || []).map(p => `<tr><td>${p.ticker}</td><td>${p.shares}</td></tr>`).join('') +
+    '</table>';
+
+  const fa = await j('/api/failures');
+  document.getElementById('failures').innerHTML =
+    (fa.failures || []).length ?
+      '<table><tr><th>id</th><th>source</th><th>status</th></tr>' +
+      fa.failures.map(f =>
+        `<tr><td>${f.failure_id}</td><td>${f.source}</td><td class="${cls(f.status)}">${f.status}</td></tr>`).join('') +
+      '</table>' : 'none';
+
+  const rc = await j('/api/recommendations');
+  const r0 = (rc.recommendations || [])[0];
+  document.getElementById('rec').innerHTML = r0 ?
+    new Date(r0.ts * 1000).toISOString() + '<br><pre>' +
+    JSON.stringify(r0.recommendation, null, 1) + '</pre>' : 'none yet';
+
+  const hi = await j('/api/history');
+  document.getElementById('history').innerHTML =
+    (hi.sessions || []).length ?
+      '<table><tr><th>session</th><th>entries</th></tr>' +
+      hi.sessions.map(s => `<tr><td>${s.session_id}</td><td>${s.entries}</td></tr>`).join('') +
+      '</table>' : 'no sessions yet';
+})();
+</script>
+</body>
+</html>

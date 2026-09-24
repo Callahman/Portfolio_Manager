@@ -1,0 +1,9 @@
+[Unit]
+Description=Portfolio Manager - news every 2 hours
+
+[Timer]
+OnCalendar=*-*-* :00/2 * * *
+Persistent=true
+
+[Install]
+WantedBy=timers.target
