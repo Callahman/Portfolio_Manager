@@ -115,6 +115,12 @@ def mark_to_market(
     """Write a daily mark row. benchmark_total is scaled from the prior mark
     (first mark = start_balance)."""
     conn = db.connect(db_path) if db_path is None else db_path
+    # Auto-seed the starting balance on first use (idempotent), so the first
+    # daily mark bootstraps the paper portfolio instead of crashing on an
+    # empty cash table.
+    if conn.execute("SELECT 1 FROM cash WHERE id=1").fetchone() is None:
+        conn.execute("INSERT INTO cash (id, value) VALUES (1, ?)", (float(start_balance or 0.0),))
+        conn.commit()
     cash = float(conn.execute("SELECT value FROM cash WHERE id=1").fetchone()[0])
     pos_value = 0.0
     for ticker, shares, _ in conn.execute("SELECT ticker, shares, avg_cost FROM positions").fetchall():
