@@ -2,7 +2,7 @@
 Description=Portfolio Manager - news every 2 hours
 
 [Timer]
-OnCalendar=*-*-* :00/2 * * *
+OnCalendar=*-*-* 00/2:00:00
 Persistent=true
 
 [Install]

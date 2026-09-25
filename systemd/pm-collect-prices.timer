@@ -3,7 +3,10 @@ Description=Portfolio Manager - prices a few times daily around market hours
 
 [Timer]
 # US market hours are ~13:30-20:00 UTC (EDT) / 14:30-21:00 UTC (EST)
-OnCalendar=*-*-* 13:30:00, 16:00:00, 19:30:00, 20:15:00
+OnCalendar=*-*-* 13:30:00
+OnCalendar=*-*-* 16:00:00
+OnCalendar=*-*-* 19:30:00
+OnCalendar=*-*-* 20:15:00
 Persistent=true
 
 [Install]
