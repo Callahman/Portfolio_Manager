@@ -1,0 +1,14 @@
+[Unit]
+Description=Portfolio Manager - read-only LAN API (1080)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/portfolio_manager
+ExecStart=/opt/portfolio_manager/.venv/bin/python -m api.server
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -26,6 +26,8 @@
   <div class="card"><h2>Failures</h2><div id="failures" class="muted">loading…</div></div>
   <div class="card"><h2>Latest recommendation</h2><div id="rec" class="muted">loading…</div></div>
   <div class="card"><h2>Conversation history</h2><div id="history" class="muted">loading…</div></div>
+  <div class="card"><h2>Monitoring</h2><div id="monitoring" class="muted">loading…</div></div>
+  <div class="card"><h2>Decision journal</h2><div id="decisions" class="muted">loading…</div></div>
 </div>
 
 <script>
@@ -83,6 +85,30 @@ function cls(s) { return s === 'ok' ? 'ok' : s === 'stale' ? 'stale' : 'failed';
       '<table><tr><th>session</th><th>entries</th></tr>' +
       hi.sessions.map(s => `<tr><td>${s.session_id}</td><td>${s.entries}</td></tr>`).join('') +
       '</table>' : 'no sessions yet';
+
+  const mo = await j('/api/monitoring');
+  const t4 = mo.team_runtime_4090 || {};
+  const pl = mo.pipeline || {};
+  const plCls = pl.status === 'ok' ? 'ok' : pl.status === 'failed' ? 'failed' : 'stale';
+  document.getElementById('monitoring').innerHTML =
+    'API: <span class="ok">ok</span><br>' +
+    'quality report: ' + (mo.quality_report_at || 'none') + '<br>' +
+    '4090 team runtime: ' + (t4.reachable === true ? '<span class="ok">reachable</span>' :
+      t4.reachable === false ? '<span class="failed">unreachable</span>' :
+      '<span class="muted">' + (t4.note || 'unknown') + '</span>') + '<br>' +
+    'pipeline: <span class="' + plCls + '">' + (pl.status || 'no run yet') + '</span>' +
+    (pl.current_stage ? ' (stage: ' + pl.current_stage + ')' : '') +
+    (pl.error ? '<br><span class="failed">' + pl.error + '</span>' : '');
+
+  const dj = await j('/api/decisions');
+  document.getElementById('decisions').innerHTML =
+    (dj.decisions || []).length ?
+      '<table><tr><th>ts</th><th>session</th><th>actions</th></tr>' +
+      dj.decisions.map(d => {
+        const rd = d.recommendation || {};
+        const acts = (rd.actions || []).map(a => a.side + ' ' + a.shares + ' ' + a.ticker).join(', ');
+        return `<tr><td>${new Date(d.ts * 1000).toISOString().slice(0, 16)}</td><td>${d.session_id}</td><td>${acts || '—'}</td></tr>`;
+      }).join('') + '</table>' : 'no decisions yet';
 })();
 </script>
 </body>

@@ -13,6 +13,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import requests
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
@@ -146,7 +147,51 @@ def create_app() -> FastAPI:
             ],
         }
 
+    @app.get("/api/monitoring")
+    def monitoring() -> dict:
+        """Health view (Epic 11.3): API self-status, 4090 reachability,
+        pipeline state, quality-report age."""
+        q = vquality.load_report()
+        fourzero: dict = {}
+        url = (config.get("TEAM_RUNTIME_HEALTH_URL") or "").strip()
+        if url:
+            try:
+                r = requests.get(url, timeout=5)
+                fourzero = {
+                    "reachable": True,
+                    "url": url,
+                    "status": r.json() if r.ok else f"HTTP {r.status_code}",
+                }
+            except Exception as e:
+                fourzero = {"reachable": False, "url": url, "error": str(e)}
+        else:
+            fourzero = {"reachable": None, "note": "TEAM_RUNTIME_HEALTH_URL not set"}
+        return {
+            "api": {"status": "ok"},
+            "quality_report_at": (q or {}).get("generated_at"),
+            "team_runtime_4090": fourzero,
+            "pipeline": _pipeline_state(),
+        }
+
+    @app.get("/api/decisions")
+    def decisions() -> dict:
+        """Decision journal (Epic 7.5): posted recommendations + results."""
+        from common import history as chist
+
+        entries = chist.decision_journal()
+        return {"count": len(entries), "decisions": entries[-50:][::-1]}
+
     return app
+
+
+def _pipeline_state() -> dict:
+    p = config.HISTORY_DIR / "pipeline" / "state.json"
+    if not p.exists():
+        return {"available": False}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"available": False}
 
 
 def main() -> int:

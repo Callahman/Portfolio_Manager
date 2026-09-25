@@ -1,0 +1,8 @@
+[Unit]
+Description=Portfolio Manager - analytics run (1080)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/portfolio_manager
+ExecStart=/opt/portfolio_manager/.venv/bin/python -m analyze.runner

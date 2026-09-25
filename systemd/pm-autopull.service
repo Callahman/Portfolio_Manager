@@ -1,0 +1,8 @@
+[Unit]
+Description=Portfolio Manager - auto-pull 4090 code + smoke test (1080)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/portfolio_manager
+ExecStart=/opt/portfolio_manager/.venv/bin/python -m workflows.autopull
