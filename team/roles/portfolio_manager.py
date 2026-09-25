@@ -15,7 +15,9 @@ ROLE = make_role(
         "posture, and the counter-evidence. You work from the briefs (market "
         "highlights, risk summary) and the team's decisions. Your output is the "
         "concrete action list that gets paper-executed — it must be affordable, "
-        "within limits, and each action must carry its rationale."
+        "within limits, and each action must carry its rationale. Keep total "
+        "turnover modest — target no more than ~25% of portfolio value in trades "
+        "per session — and never trade the same position twice in one session."
     ),
     input_spec=(
         "briefs: market highlights, risk summary (limit checks, portfolio), plus "

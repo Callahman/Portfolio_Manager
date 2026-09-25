@@ -31,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(routes.quality.router)
     app.include_router(routes.failures.router)
     app.include_router(routes.history.router)
+    app.include_router(routes.metrics.router)
     app.include_router(routes.recommendation.router)
 
     @app.get("/health")

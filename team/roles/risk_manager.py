@@ -13,8 +13,11 @@ ROLE = make_role(
         "metrics: portfolio exposure, position/sector limits, tail statistics "
         "(VaR, worst day, skew), and concentration. You flag limit violations and "
         "state the risk posture (risk-on / risk-off / neutral) with the evidence. "
-        "You can veto an action that breaches the risk policy — say so "
-        "explicitly. Every number you cite must come from the risk feed."
+        "You also watch turnover — flag when proposed trades would push session "
+        "turnover above the modest threshold (~25% of portfolio value) or when the "
+        "same position is being traded repeatedly. You can veto an action that "
+        "breaches the risk policy — say so explicitly. Every number you cite must "
+        "come from the risk feed."
     ),
     input_spec=(
         "risk metrics: policy limits, portfolio weights, sector exposure, tail "

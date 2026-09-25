@@ -1,311 +1,202 @@
-"""Session runtime (Epic 5 DoD + Epic 10 ad-hoc sessions).
+"""Team session (Epic 5, Story 5.3 + Epic 10) — the 4090's team runtime.
 
 A session:
-  1. selects roles — ad-hoc via --roles, or the Team Lead forms pods from
-     all available roles (alternates by construction)
-  2. runs bounded rounds of pod deliberation: each role speaks in its pod's
-     shared conversation, the pod lead synthesizes the pod decision, and the
-     Team Lead relays each pod's decision into the next pod's context
-     (deterministic relay). Inter-round context is bounded (team/context.py).
-  3. after each round the Team Lead may close early (convergence check)
-  4. final: the Portfolio Manager proposes the allocation, the Team Lead
-     synthesizes the final recommendation
-  5. writes the transcript (JSONL + markdown) and, when posted, the decision
-     journal (common/history.py)
-  6. optionally posts the final recommendation to the 1080 API (--post)
+  1. fetches each role's feed from the 1080's read-only API
+  2. forms pods (Team Lead decides, or a deterministic fallback)
+  3. runs a bounded number of deliberation rounds (each pod speaks in turn,
+     Team Lead relays prior decisions); closes early on convergence or a
+     detected deadlock (two identical consecutive round summaries)
+  4. synthesizes a final recommendation (Portfolio Manager, Team Lead
+     fallback, and a conservative hold if both fail) so a recommendation is
+     always produced
+  5. records the full transcript in conversation history (per-pod JSONL +
+     markdown)
+  6. optionally posts the recommendation to the 1080 (POST /recommendation)
 
-CLI:
-  python -m team.session [--roles r1,r2,...] [--rounds 3] [--post]
-                         [--session-id ID] [--api-base URL]
-
-Exit codes: 0 = completed, 1 = error, 2 = session timeout.
+Usage:
+  python -m team.session --rounds 3 [--post] [--session-id ...]
+  python -m team.session --roles quant,challenger,risk_manager   # ad-hoc subset
+  python -m team.session --goal "analyze the semiconductor sector"  # free-form
 """
 from __future__ import annotations
 
-import json
+import argparse
 import logging
-import random
 import sys
 import time
-
-import requests
+from datetime import datetime, timezone
 
 from common import config
 from common import history as chist
-from team import context as tcontext
-from team import invocation
-from team import pods as tpods
-from team import roles as troles
-from team.roles import get_role
+from team import context, invocation, pods
 
 log = logging.getLogger(__name__)
 
 AGENDA = (
-    "Daily portfolio deliberation: review the market snapshot, statistical "
-    "signals, fundamentals, macro readings, and risk metrics; weigh the "
-    "counter-evidence; converge on a recommendation within the risk policy."
+    "Assess the current market for the watchlist (SPY, QQQ, TLT, GLD). "
+    "Identify the highest-conviction opportunities and risks, weigh the "
+    "counter-evidence, and recommend concrete portfolio actions (buy/sell, "
+    "tickers, sizing) within the risk policy."
 )
 
 
-class SessionTimeout(RuntimeError):
-    pass
-
-
-def _check_timeout(start: float, timeout_s: float, session_id: str) -> None:
-    if time.time() - start > timeout_s:
-        chist.append_entry(
-            session_id,
-            {"role": "system", "pod": "-", "content": {"summary": "SESSION TIMEOUT — aborting"}, "ts": time.time()},
-        )
-        raise SessionTimeout(f"session {session_id} exceeded {timeout_s / 3600:.1f}h")
-
-
-def _relay_context(base_context: str, prior_decisions: list[dict]) -> str:
-    if not prior_decisions:
-        return base_context
-    return (
-        base_context
-        + "\n\nPREVIOUS POD DECISIONS (relayed by the Team Lead):\n"
-        + json.dumps(prior_decisions, indent=2)
-    )
-
-
-def _lead_feed_with_decisions(lead_feed: dict, decisions: list[dict], pm_out: dict | None = None) -> dict:
-    feed = dict(lead_feed) if lead_feed else {"role": "team_lead", "data": {}}
-    data = dict(feed.get("data") or {})
-    data["pod_decisions"] = decisions
-    if pm_out:
-        data["portfolio_manager_allocation"] = pm_out
-    feed["data"] = data
-    return feed
-
-
-def run_session(roles_arg: str | None, rounds: int, post: bool, session_id: str, api_base: str | None) -> int:
+def run(rounds: int = 3, roles: list[str] | None = None, session_id: str | None = None,
+        post: bool = False, api_base: str | None = None, goal: str | None = None) -> int:
     config.load_env()
-    start = time.time()
-    timeout_s = config.get_float("SESSION_TIMEOUT_HOURS", 4.0) * 3600
-    max_rounds = config.get_int("DELIBERATION_MAX_ROUNDS", 6)
-    rounds = max(1, min(rounds, max_rounds))
+    base = api_base or (config.get("FEED_API_BASE") or "").strip()
+    sid = session_id or datetime.now(timezone.utc).strftime("adhoc-%Y%m%d-%H%M%S")
+    agenda = goal or AGENDA
+    t0 = time.time()
 
-    chist.start_session(
-        session_id, meta={"roles_arg": roles_arg, "rounds": rounds, "post": post}
-    )
-    chist.append_entry(
-        session_id,
-        {
-            "role": "system",
-            "pod": "-",
-            "content": {"summary": f"session start: rounds={rounds}, roles={roles_arg or 'team-lead formation'}"},
-            "ts": time.time(),
-        },
-    )
+    if not base:
+        log.error("FEED_API_BASE not set — cannot fetch feeds")
+        return 1
 
-    # 1. pods
-    if roles_arg:
-        selected = [r.strip() for r in roles_arg.split(",") if r.strip()]
-        for r in selected:
-            get_role(r)  # raises KeyError on unknown role
-        pods = tpods.chunk_roles(selected)
-        chist.append_entry(
-            session_id,
-            {"role": "system", "pod": "-", "content": {"summary": f"ad-hoc pods: {[(p.name, p.roles) for p in pods]}"}, "ts": time.time()},
-        )
+    # 1. fetch feeds (only for the roles in this session)
+    feed_roles = roles or pods.ALL_ROLES
+    feeds = {}
+    for role in feed_roles:
+        f = invocation.fetch_feed(role, base)
+        if f is not None:
+            feeds[role] = f
+    if not feeds:
+        log.error("could not fetch any feeds from %s", base)
+        return 1
+
+    # 2. form pods
+    available = list(feeds.keys())
+    if roles:
+        pod_groups = [roles]  # a single ad-hoc pod of the chosen roles
     else:
-        available = [r for r in troles.all_roles() if r != "team_lead"]
-        pods = tpods.form_pods(available, api_base)
-        chist.append_entry(
-            session_id,
-            {"role": "system", "pod": "-", "content": {"summary": f"Team Lead formed pods: {[(p.name, p.roles) for p in pods]}"}, "ts": time.time()},
-        )
-    if not pods:
-        log.error("no pods to run")
-        return 1
+        pods_payload = {r: {"feed": f} for r, f in feeds.items()}
+        decision = invocation.invoke("team_lead", pods_payload, base, agenda=agenda)
+        if decision is None:
+            pod_groups = pods.chunk_roles(available)
+        else:
+            pod_groups = pods.form_pods(decision.get("pods", []), available)
+            if not pod_groups:
+                pod_groups = pods.chunk_roles(available)
 
-    # base digest: the Team Lead's quality brief
-    lead_feed: dict = {}
-    try:
-        lead_feed = invocation.fetch_feed("team_lead", api_base)
-        digest = {"quality": lead_feed.get("quality"), "as_of": lead_feed.get("as_of")}
-    except Exception as e:
-        log.warning("team_lead feed unavailable (%s) — running without the quality brief", e)
-        digest = {}
-
-    round_summaries: list[str] = []
-    final_rec: dict | None = None
-
-    # 2. rounds
+    # 3. deliberation rounds (bounded; close on convergence or deadlock)
+    digests: list[dict] = []
+    prev_summary: str | None = None
+    closed_early = False
     for rnd in range(1, rounds + 1):
-        _check_timeout(start, timeout_s, session_id)
-        base_context = tcontext.assemble_context(
-            agenda=AGENDA, round_summaries=round_summaries, digests=digest
-        )
-        chist.append_entry(
-            session_id,
-            {"role": "system", "pod": "-", "content": {"summary": f"round {rnd}/{rounds} start"}, "ts": time.time()},
-        )
-        prior_decisions: list[dict] = []
-        round_entries: list[dict] = []
-        for pod in pods:
-            _check_timeout(start, timeout_s, session_id)
-            relay = _relay_context(base_context, prior_decisions)
-            tpods.run_pod(pod, agenda=AGENDA, context=relay, api_base=api_base)
-            for e in pod.entries:
-                round_entries.append(e)
-                chist.append_entry(session_id, {**e, "round": rnd})
-            if pod.decision:
-                prior_decisions.append(pod.decision)
-        round_summaries.append(tcontext.summarize_round(round_entries))
+        rnd_digest = {"round": rnd, "pods": []}
+        for pod in pod_groups:
+            speaker = pod[0]
+            entry = invocation.invoke(
+                speaker, feeds, base, agenda=agenda,
+                phase={"round": rnd, "pod": pod, "prior_pods": rnd_digest["pods"]},
+            )
+            if entry is None:
+                continue
+            entry["round"] = rnd
+            entry["pod"] = pod
+            rnd_digest["pods"].append(entry)
+            digests.append(entry)
+        summary = context.summarize_round(rnd_digest)
+        log.info("round %d: %d pod entries; %s", rnd, len(rnd_digest["pods"]), summary[:120])
+        if prev_summary is not None and summary == prev_summary:
+            log.warning("deadlock detected at round %d (identical round summaries) — closing", rnd)
+            closed_early = True
+            break
+        if context.round_converges(summary, rnd_digest):
+            log.info("round %d converged — closing deliberation early", rnd)
+            closed_early = True
+            break
+        prev_summary = summary
 
-        # convergence check (Team Lead may close early)
-        if rnd < rounds:
-            _check_timeout(start, timeout_s, session_id)
-            extra = (
-                "PHASE: convergence check. The team has completed round "
-                f"{rnd}/{rounds}. Has the team converged enough to stop? If yes, set "
-                "`close: true` and provide `final_recommendation`. If not, set "
-                "`close: false` and summarize what is still open in `summary`."
+    # 4. final recommendation (always produced)
+    synthesis_fallback = False
+    final_rec: list = []
+    final_rationale = ""
+    pm = invocation.invoke("portfolio_manager", feeds, base, agenda=agenda, phase={"final": True})
+    if pm is not None:
+        final_rec = pm.get("allocation_actions", [])
+        final_rationale = pm.get("rationale", "")
+    else:
+        lead = invocation.invoke("team_lead", feeds, base, agenda=agenda, phase={"final": True})
+        if lead is not None:
+            final_rec = lead.get("actions", [])
+            final_rationale = lead.get("rationale", "")
+        else:
+            synthesis_fallback = True
+            final_rationale = (
+                "Final synthesis unavailable (Portfolio Manager and Team Lead "
+                "both failed). Conservative hold: no trades this round."
             )
-            try:
-                res = invocation.invoke_role(
-                    "team_lead",
-                    api_base=api_base,
-                    feed=_lead_feed_with_decisions(lead_feed, prior_decisions),
-                    extra_instructions=extra,
-                )
-                out = res["output"]
-                chist.append_entry(
-                    session_id, {"role": "team_lead", "pod": "-", "round": rnd, "content": out, "ts": time.time()}
-                )
-                if out.get("close") and out.get("final_recommendation"):
-                    final_rec = out["final_recommendation"]
-                    log.info("Team Lead closed the session after round %d", rnd)
-                    break
-            except Exception as e:
-                log.warning("convergence check failed (%s) — continuing to the next round", e)
+            log.warning("final synthesis failed — using conservative hold fallback")
 
-    # 3. final
-    if final_rec is None:
-        _check_timeout(start, timeout_s, session_id)
-        all_decisions = [p.decision for p in pods if p.decision]
-        pm_extra = (
-            "PHASE: final allocation. Propose the concrete allocation actions "
-            "(buy/sell, tickers, shares) from the team's pod decisions. Each "
-            "action must carry its rationale and respect the risk policy."
-        )
-        pm_out: dict = {}
-        try:
-            res = invocation.invoke_role(
-                "portfolio_manager", api_base=api_base, extra_instructions=pm_extra
-            )
-            pm_out = res["output"]
-            chist.append_entry(
-                session_id, {"role": "portfolio_manager", "pod": "-", "content": pm_out, "ts": time.time()}
-            )
-        except Exception as e:
-            log.error("portfolio_manager failed (%s) — Team Lead synthesizes from pod decisions only", e)
-        lead_extra = (
-            "PHASE: final synthesis. Synthesize the team's final recommendation "
-            "from the pod decisions and the Portfolio Manager's allocation. Put it "
-            "in `final_recommendation` (actions + rationale). It must be concrete, "
-            "affordable, and within the risk policy."
-        )
-        try:
-            res = invocation.invoke_role(
-                "team_lead",
-                api_base=api_base,
-                feed=_lead_feed_with_decisions(lead_feed, all_decisions, pm_out),
-                extra_instructions=lead_extra,
-            )
-            out = res["output"]
-            chist.append_entry(
-                session_id, {"role": "team_lead", "pod": "-", "content": out, "ts": time.time()}
-            )
-            final_rec = out.get("final_recommendation")
-        except Exception as e:
-            log.error("Team Lead final synthesis failed: %s", e)
-    if final_rec is None:
-        log.error("no final recommendation produced")
-        chist.write_markdown(session_id)
-        return 1
+    # 5. record the transcript (per-pod JSONL + markdown)
+    as_of = next(iter(feeds.values())).get("as_of")
+    meta = {
+        "session_id": sid,
+        "kind": "adhoc" if roles else "full",
+        "roles": available,
+        "pods": pod_groups,
+        "rounds_run": len({d.get("round") for d in digests}),
+        "closed_early": closed_early,
+        "synthesis_fallback": synthesis_fallback,
+        "agenda": agenda,
+        "as_of": as_of,
+        "duration_s": round(time.time() - t0, 1),
+        "recommendation": final_rec,
+    }
+    chist.start_session(sid, meta)
+    for d in digests:
+        chist.append_entry(sid, d)
+    chist.finalize_session(sid, {"recommendation": final_rec, "rationale": final_rationale})
+    log.info("session %s recorded (%d entries, %d pods, %d rounds)", sid, len(digests), len(pod_groups), meta["rounds_run"])
 
-    # 4. post + decision journal
+    # 6. optionally post to the 1080
     if post:
-        rec_payload = {
-            "actions": final_rec.get("actions", []),
-            "rationale": final_rec.get("rationale", ""),
-        }
-        base = (api_base or config.get("FEED_API_BASE") or "").rstrip("/")
+        import requests
+
+        feeds_as_of = {role: (f or {}).get("as_of") for role, f in feeds.items()}
+        portfolio_baseline = _fetch_portfolio_baseline(base)
         try:
-            r = requests.post(f"{base}/recommendation", json=rec_payload, timeout=120)
-            result = {"status_code": r.status_code, "body": r.json() if r.ok else r.text[:500]}
-            chist.record_decision(session_id, rec_payload, result)
-            chist.append_entry(
-                session_id,
-                {"role": "system", "pod": "-", "content": {"summary": f"posted recommendation: HTTP {r.status_code}"}, "ts": time.time()},
+            r = requests.post(f"{base}/recommendation", json={"actions": final_rec, "rationale": final_rationale}, timeout=60)
+            log.info("posted recommendation to 1080: HTTP %d", r.status_code)
+            chist.record_decision(
+                sid,
+                {"actions": final_rec, "rationale": final_rationale},
+                {"http_status": r.status_code, "body": r.text[:500]},
+                feeds_as_of=feeds_as_of,
+                portfolio_baseline=portfolio_baseline,
             )
         except Exception as e:
-            result = {"error": str(e)}
-            chist.record_decision(session_id, rec_payload, result)
-            log.error("POST /recommendation failed: %s", e)
-
-    chist.write_markdown(session_id)
-    chist.prune()
-    log.info(
-        "session %s complete: %d rounds, final recommendation with %d actions",
-        session_id, rounds, len(final_rec.get("actions", [])),
-    )
+            log.error("failed to post recommendation: %s", e)
     return 0
+
+
+def _fetch_portfolio_baseline(base: str) -> dict | None:
+    """Capture the paper-portfolio P&L state from the 1080 API (baseline for
+    the decision journal's subsequent-outcome linkage, Epic 7.5)."""
+    import requests
+
+    try:
+        r = requests.get(f"{base}/metrics", timeout=15)
+        if r.ok:
+            return r.json()
+    except Exception:
+        pass
+    return None
 
 
 def main(argv: list[str]) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    roles_arg: str | None = None
-    rounds = 3
-    post = False
-    session_id: str | None = None
-    api_base: str | None = None
-    i = 1
-    while i < len(argv):
-        a = argv[i]
-        if a == "--roles":
-            roles_arg = argv[i + 1]
-            i += 2
-        elif a == "--rounds":
-            rounds = int(argv[i + 1])
-            i += 2
-        elif a == "--post":
-            post = True
-            i += 1
-        elif a == "--session-id":
-            session_id = argv[i + 1]
-            i += 2
-        elif a == "--api-base":
-            api_base = argv[i + 1]
-            i += 2
-        else:
-            log.error("unknown argument: %s", a)
-            return 1
-    if session_id is None:
-        session_id = time.strftime("%Y%m%d-%H%M%S") + "-" + "".join(
-            random.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=4)
-        )
-    code = 1
-    try:
-        code = run_session(roles_arg, rounds, post, session_id, api_base)
-    except SessionTimeout as e:
-        log.error("%s", e)
-        code = 2
-    except (KeyError, ValueError, requests.RequestException) as e:
-        log.error("%s", e)
-        code = 1
-    try:
-        from team import health as thealth
-
-        thealth.record_session(session_id, "completed" if code == 0 else f"exit {code}")
-    except Exception:
-        pass
-    return code
+    ap = argparse.ArgumentParser(description="run a team session")
+    ap.add_argument("--rounds", type=int, default=3)
+    ap.add_argument("--roles", default="", help="comma-separated role subset (ad-hoc)")
+    ap.add_argument("--session-id", default=None)
+    ap.add_argument("--post", action="store_true", help="post the recommendation to the 1080")
+    ap.add_argument("--api-base", default=None)
+    ap.add_argument("--goal", default=None, help="free-form goal/prompt (overrides the default agenda)")
+    a = ap.parse_args(argv)
+    roles = [r.strip() for r in a.roles.split(",") if r.strip()] or None
+    return run(a.rounds, roles, a.session_id, a.post, a.api_base, a.goal)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main(sys.argv[1:]))

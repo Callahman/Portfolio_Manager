@@ -51,6 +51,7 @@ exact launch command for your build). Then:
 - **Test one role:** `python -m team.invocation team_lead`
 - **Run a session:** `python -m team.session --rounds 3 --post`
 - **Ad-hoc session:** `python -m team.session --roles quant,challenger,risk_manager`
+- **Free-form goal:** `python -m team.session --goal "analyze the semiconductor sector"`
 - **Self-mod (nightly):** `python -m team.self_mod`
 
 Nightly self-mod via Task Scheduler:

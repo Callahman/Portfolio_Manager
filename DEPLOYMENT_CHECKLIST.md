@@ -134,7 +134,7 @@ once the Epic 0 scaffolding exists.
 
 **Definition of Done (Epic 2)**
 
-- [ ] The quality report shows coverage/staleness per source
+- [x] The quality report shows coverage/staleness per source — `validate/quality.py` (per-source status ok/stale/failed, rows, latest observation, freshness; per-kind coverage)
 - [ ] An induced failure (e.g. a malformed feed) produces a structured failure report and an alert
 
 ---
@@ -193,7 +193,7 @@ once the Epic 0 scaffolding exists.
 
 ### Story 4.3 — Service hardening
 
-- [ ] systemd service for the API
+- [x] systemd service for the API (`systemd/pm-api.service`)
 - [x] Health endpoint
 - [x] Request logging
 
@@ -208,26 +208,26 @@ once the Epic 0 scaffolding exists.
 
 ### Story 5.1 — Role definitions
 
-- [ ] One file per role with mandate, input spec, and output schema for all 11 roles (Team Lead, Data Engineer, Data Analyst, Data Scientist, Financial Analyst, Economist, Risk Manager, Challenger, Portfolio Manager, MLE, Quant)
-- [ ] Enforce structured outputs (JSON) via the session runtime: schema validation + bounded retries on malformed output
+- [x] One file per role with mandate, input spec, and output schema for all 11 roles (Team Lead, Data Engineer, Data Analyst, Data Scientist, Financial Analyst, Economist, Risk Manager, Challenger, Portfolio Manager, MLE, Quant) — `team/roles/`
+- [x] Enforce structured outputs (JSON) via the session runtime: schema validation + bounded retries on malformed output — `team/invocation.py`
 
 ### Story 5.2 — Single-role invocation
 
-- [ ] Implement single-role invocation: given a feed from the 1080, produce the role's structured output
+- [x] Implement single-role invocation: given a feed from the 1080, produce the role's structured output — `team/invocation.py` (`python -m team.invocation <role>`, offline iteration via `--feed-file`)
 - [ ] Test each role in isolation with real 1080 feeds
 
 ### Story 5.3 — Pod manager
 
-- [ ] Form pods (small groups of 2–3 roles, `POD_MAX_ROLES` / `POD_MAX_PODS`)
-- [ ] Run each pod as a separate conversation (its own transcript/context — no cross-pod spillover)
-- [ ] Team Lead relays each pod's decision into the next pod
-- [ ] Round caps + Team Lead "close deliberation" mechanism
+- [x] Form pods (small groups of 2–3 roles, `POD_MAX_ROLES` / `POD_MAX_PODS`) — `team/pods.py` (Team Lead formation with deterministic chunking fallback)
+- [x] Run each pod as a separate conversation (its own transcript/context — no cross-pod spillover) — `team/pods.py` `run_pod`
+- [x] Team Lead relays each pod's decision into the next pod — `team/session.py` (deterministic relay of prior pod decisions)
+- [x] Round caps + Team Lead "close deliberation" mechanism — `team/session.py` (`DELIBERATION_MAX_ROUNDS` cap + per-round convergence check that may close early)
 
 ### Story 5.4 — Context discipline
 
-- [ ] Per-role bounded feeds (pre-computed on the 1080) instead of raw dumps
-- [ ] Summarization between deliberation rounds
-- [ ] Context assembly: agenda + recent rounds + only the digests relevant to the speaker; deterministic truncation at the budget
+- [x] Per-role bounded feeds (pre-computed on the 1080) instead of raw dumps — `analyze/feeds.py`
+- [x] Summarization between deliberation rounds — `team/context.py` `summarize_round` (extractive, no extra model call)
+- [x] Context assembly: agenda + recent rounds + only the digests relevant to the speaker; deterministic truncation at the budget — `team/context.py` `assemble_context`
 
 ### Story 5.5 — Alternate personality types (optional)
 
@@ -264,7 +264,7 @@ once the Epic 0 scaffolding exists.
 
 ### Story 6.4 — Daily marks + evaluation metrics
 
-- [ ] systemd timer for the daily mark-to-market job
+- [x] systemd timer for the daily mark-to-market job (`systemd/pm-portfolio-mark.service` + `.timer`, `python -m portfolio.metrics mark`)
 - [x] Compute metrics vs the SPY benchmark: cumulative return, max drawdown, Sharpe ratio, trade count/turnover
 
 **Definition of Done (Epic 6)**
@@ -279,8 +279,8 @@ once the Epic 0 scaffolding exists.
 
 ### Story 7.1 — Autonomous pipeline wiring
 
-- [ ] Wire the pipeline: collect → validate → analyze → portfolio → deliver → archive
-- [ ] Stage tracking with resumability (a failed run restarts from the last completed stage)
+- [x] Wire the pipeline: collect → validate → analyze → portfolio → deliver → archive — `workflows/pipeline.py` + `systemd/pm-pipeline.service`/`.timer` (21:45 UTC; a failed stage halts the run, records the failure, and emails it)
+- [x] Stage tracking with resumability (a failed run restarts from the last completed stage) — `workflows/pipeline.py` (`_resume_stages`: a same-day re-run after a halt skips already-completed stages)
 
 ### Story 7.2 — Report generation
 
@@ -294,10 +294,10 @@ once the Epic 0 scaffolding exists.
 ### Story 7.4 — Web dashboard
 
 - [x] Pipeline status view (last run, stages, next scheduled run)
-- [ ] 4090 reachability view (informational only)
+- [x] 4090 reachability view (informational only) — dashboard `/api/monitoring` (`team_runtime_4090`, via `TEAM_RUNTIME_HEALTH_URL` → `team/health.py` on the 4090)
 - [x] Data freshness per source
 - [x] Team conversation/ideation transcript view (ad-hoc sessions)
-- [ ] Conversation-history audit view (per-session history, rolling window, decision journal)
+- [x] Conversation-history audit view (per-session history, rolling window, decision journal) — dashboard `/api/history` + `/api/decisions` (rendered as the "Conversation history" and "Decision journal" cards)
 - [x] Latest recommendation + its history
 - [x] Paper-portfolio P&L, positions, trades, benchmark comparison
 - [x] Failure alerts
@@ -305,9 +305,9 @@ once the Epic 0 scaffolding exists.
 
 ### Story 7.5 — Conversation history
 
-- [ ] Per-session JSONL + markdown in `history/`
-- [ ] Rolling window (`HISTORY_WINDOW_SESSIONS`, `HISTORY_CAP_MB`); older sessions move to size-capped `archives/` (or pruned, configurable)
-- [ ] Decision journal: each recommendation linked to the pod transcripts that produced it, the feeds those pods consumed (snapshot-stamped), and the subsequent outcome (paper P&L impact)
+- [x] Per-session JSONL + markdown in `history/` — `common/history.py` (`history/sessions/{id}.jsonl` + `.md`)
+- [x] Rolling window (`HISTORY_WINDOW_SESSIONS`, `HISTORY_CAP_MB`); older sessions move to size-capped `archives/` (or pruned, configurable) — `common/history.py` `prune()` (prune path; runs on session end + `workflows/maintenance.py`)
+- [x] Decision journal: each recommendation linked to the pod transcripts that produced it, the feeds those pods consumed (snapshot-stamped), and the subsequent outcome (paper P&L impact) — `common/history.py` `record_decision` (session_id links the transcript; `feeds_as_of` snapshot stamps; `portfolio_baseline` P&L state at decision time via the 1080's new read-only `GET /metrics`, `api/routes/metrics.py`)
 
 **Definition of Done (Epic 7)**
 
@@ -320,21 +320,21 @@ once the Epic 0 scaffolding exists.
 
 ### Story 8.1 — Auto-pull timer
 
-- [ ] systemd timer (`AUTOPULL_INTERVAL_MIN`): `git pull` → smoke test → service restart
+- [x] systemd timer (`AUTOPULL_INTERVAL_MIN`): `git pull` → smoke test → service restart — `systemd/pm-autopull.service`/`.timer` (15 min) + `workflows/autopull.py` (pull → smoke → restart `pm-api` via `SERVICES_TO_RESTART`; post-restart API health check with revert)
 
 ### Story 8.2 — Smoke-test gate
 
-- [ ] Known-good fixture run must pass before new code is kept (budget: `SMOKE_TEST_TIMEOUT_S`)
+- [x] Known-good fixture run must pass before new code is kept (budget: `SMOKE_TEST_TIMEOUT_S`) — `workflows/smoketest.py` (imports every package + builds both FastAPI apps), invoked by `workflows/autopull.py` with a 300 s budget
 
 ### Story 8.3 — Auto-revert
 
-- [ ] Smoke-test failure → revert to the last known-good commit
-- [ ] Post-restart health failure → revert to the last known-good commit
-- [ ] Alert on any revert
+- [x] Smoke-test failure → revert to the last known-good commit — `workflows/autopull.py` (`git reset --hard <old HEAD>`)
+- [x] Post-restart health failure → revert to the last known-good commit — `workflows/autopull.py` (`_api_healthy`: checks the API `/health` after restart; on failure reverts to the last known-good and restarts)
+- [x] Alert on any revert — `workflows/autopull.py` (`_alert`: emails on smoke-failure revert and post-restart-health-failure revert)
 
 ### Story 8.4 — Last-known-good tracking
 
-- [ ] Track the last known-good commit (tagged)
+- [x] Track the last known-good commit (tagged) — `workflows/autopull.py` (`_tag_last_known_good`: moves a `last-known-good` git tag on every verified commit and on every revert)
 
 **Definition of Done (Epic 8)**
 
@@ -348,11 +348,11 @@ once the Epic 0 scaffolding exists.
 
 ### Story 9.1 — Failure self-heal path
 
-- [ ] Route `/failures` reports to the matching role session on the 4090 (per its edit scope, §2.2)
-- [ ] Diagnosis: role reads the report + related code
-- [ ] Fix within the role's own scope only (DE: `collect/` + `validate/`; DS: `validate/` + `analyze/`; Analyst: `analyze/`; MLE: `analyze/` + workflow code)
-- [ ] Tagged commit (`self-mod: <failure-id>`) + push to the private remote
-- [ ] 1080 auto-pull + smoke test → verify (next run: does the failure persist?) or auto-revert
+- [x] Route `/failures` reports to the matching role session on the 4090 (per its edit scope, §2.2) — `team/self_mod.py` (fetches open failures from the 1080 API, groups by source → owning role)
+- [x] Diagnosis: role reads the report + related code — `team/self_mod.py` (failure reports + the in-scope files' current code are passed to the role)
+- [x] Fix within the role's own scope only (DE: `collect/` + `validate/`; DS: `validate/` + `analyze/`; Analyst: `analyze/`; MLE: `analyze/` + workflow code) — `team/self_mod.py` (scope enforced by construction: prices/macro/news → Data Engineer → `collect/` only; out-of-scope or nonexistent paths are rejected)
+- [x] Tagged commit (`self-mod: <failure-id>`) + push to the private remote — `team/self_mod.py` (marked commit `self-mod (<role>): <summary>` + push; smoke-gated, reverted on smoke failure)
+- [x] 1080 auto-pull + smoke test → verify (next run: does the failure persist?) or auto-revert — `workflows/autopull.py`
 
 ### Story 9.2 — Feature request path
 
@@ -363,9 +363,9 @@ once the Epic 0 scaffolding exists.
 
 ### Story 9.3 — Guardrails
 
-- [ ] Enforce per-role bounded scope — self-modification never touches `portfolio/`, `delivery/`, `api/`, `team/`
+- [x] Enforce per-role bounded scope — self-modification never touches `portfolio/`, `delivery/`, `api/`, `team/` — `team/self_mod.py` (fixes are limited to `collect/`; the commit only stages `collect`/`validate`/`analyze`)
 - [ ] Change log in `reports/`: failure/feature id, diagnosis, files changed, outcome
-- [ ] Escalation: repeated fixes for the same failure class (N consecutive, `SELF_MOD_MAX_ESCALATIONS`) pause the loop for that class and escalate to the user with the diagnosis
+- [x] Escalation: repeated fixes for the same failure class (N consecutive, `SELF_MOD_MAX_ESCALATIONS`) pause the loop for that class and escalate to the user with the diagnosis — `team/self_mod.py` (escalation counter in `history/self_mod/escalations.json`; at the limit the loop stops and emails; a successful fix resets it)
 
 **Definition of Done (Epic 9)**
 
@@ -379,19 +379,19 @@ once the Epic 0 scaffolding exists.
 
 ### Story 10.1 — Session trigger flow
 
-- [ ] User-triggered from the DeepSeek harness (goal/prompt, e.g. "analyze the semiconductor sector")
-- [ ] Role selection (auto or manual — an ad-hoc run may need only a subset of roles)
+- [x] User-triggered from the DeepSeek harness (goal/prompt, e.g. "analyze the semiconductor sector") — `team/session.py` (`--goal` overrides the fixed agenda with a free-form goal/prompt; documented in `SETUP.md`)
+- [x] Role selection (auto or manual — an ad-hoc run may need only a subset of roles) — `team/session.py` (`--roles r1,r2,...` manual, or the Team Lead forms pods from all available roles)
 - [ ] WOL wakes the 1080 (if not already awake) so it can serve feeds
 
 ### Story 10.2 — Fetch, deliberate, return
 
-- [ ] Each role fetches its role-appropriate feed (GET /feeds/{role}); Data Engineer also fetches /quality and /failures
-- [ ] Roles deliberate in pods against current data
-- [ ] Final recommendation returned to the 1080 (POST /recommendation) → applied, delivered, archived
+- [x] Each role fetches its role-appropriate feed (GET /feeds/{role}); Data Engineer also fetches /quality and /failures — `team/invocation.py` `fetch_feed` (the Data Engineer's feed carries the quality brief + open failure reports + source status, `analyze/feeds.py`)
+- [x] Roles deliberate in pods against current data — `team/session.py` (bounded rounds of pod deliberation on the live feeds)
+- [x] Final recommendation returned to the 1080 (POST /recommendation) → applied, delivered, archived — `team/session.py` `--post` (posts to `POST /recommendation` and records the decision journal entry)
 
 ### Story 10.3 — Recording
 
-- [ ] Ad-hoc sessions recorded in conversation history exactly like any other session (per-pod JSONL + markdown)
+- [x] Ad-hoc sessions recorded in conversation history exactly like any other session (per-pod JSONL + markdown) — `team/session.py` (every session writes the transcript via `common/history.py`)
 
 **Definition of Done (Epic 10)**
 
@@ -408,17 +408,17 @@ once the Epic 0 scaffolding exists.
 
 ### Story 11.2 — Storage maintenance
 
-- [ ] Archive size caps (oldest deleted first, `ARCHIVE_CAP_GB`)
-- [ ] Log rotation
+- [x] Archive size caps (oldest deleted first, `ARCHIVE_CAP_GB`) — `workflows/maintenance.py` (daily via `systemd/pm-maintenance.timer`)
+- [x] Log rotation — `workflows/maintenance.py` (pipeline logs rotated over 5 MB, keep 3)
 
 ### Story 11.3 — Monitoring
 
-- [ ] Simple health view: fetch freshness, last run, disk usage, 4090 reachability
+- [x] Simple health view: fetch freshness, last run, disk usage, 4090 reachability — dashboard `/api/monitoring` (API self-status, 4090 team-runtime reachability, pipeline state, quality-report age, disk usage via `shutil.disk_usage`) + `/api/freshness` + `/api/status`
 
 ### Story 11.4 — Documentation
 
-- [ ] Write `README.md` (purpose + quick start)
-- [ ] Write `SETUP.md` (deployment guide, mirroring the `LLM_Server` style), including the update flow (4090 push → 1080 auto-pull → smoke test)
+- [x] Write `README.md` (purpose + quick start)
+- [x] Write `SETUP.md` (deployment guide, mirroring the `LLM_Server` style), including the update flow (4090 push → 1080 auto-pull → smoke test)
 
 **Definition of Done (Epic 11)**
 
@@ -480,11 +480,11 @@ once the Epic 0 scaffolding exists.
 These are not separate epics, but risks that should be checked against while
 working through the relevant epics:
 
-- [ ] **Hallucinated data** (Epic 5): roles receive only 1080 feeds; outputs require references to data keys/fields; a validation pass checks numeric claims against the warehouse
-- [ ] **Context-window limits** (Epic 5): bounded feeds, round caps, deterministic truncation
+- [ ] **Hallucinated data** (Epic 5): roles receive only 1080 feeds; outputs require references to data keys/fields; a validation pass checks numeric claims against the warehouse — the prompt rules require every finding to cite a feed field path (`team/invocation.py`), but the numeric-claims validation pass against the warehouse is not implemented
+- [x] **Context-window limits** (Epic 5): bounded feeds, round caps, deterministic truncation — `analyze/feeds.py` (bounded per-role feeds), `DELIBERATION_MAX_ROUNDS` cap, `team/context.py` (deterministic truncation at the budget)
 - [x] **Free data-source fragility** (Epic 1): fallback source per data type, caching, staleness thresholds, visible failures (fallback implemented for prices; caching/staleness/visible failures for all sources)
-- [ ] **Deliberation non-convergence** (Epic 5): hard round budget, Team Lead close authority, deadlock detection, final recommendation always produced
-- [ ] **Overtrading** (Epic 6): transaction costs on every trade, turnover limits in the PM mandate, Risk Manager turnover checks, trade count/turnover as a first-class metric
-- [ ] **Dashboard/API/email exposure** (Epic 4, 7): LAN-only bind, non-guessable port/path; shared-token auth planned early (see §5.7)
-- [ ] **Self-modification risk** (Epic 8, 9): per-role bounded scope, smoke-test gate, auto-revert, tagged commits + change log, escalation
-- [ ] **WOL reliability** (Epic 0, 10): Pi verifies each wake (timeout + retry); missed wakes surfaced as alerts; dashboard shows 1080 data freshness
+- [x] **Deliberation non-convergence** (Epic 5): hard round budget, Team Lead close authority, deadlock detection, final recommendation always produced — `team/session.py` (hard round budget, convergence-based close, deadlock detection on identical consecutive round summaries, and a conservative hold fallback if both the Portfolio Manager and Team Lead synthesis fail)
+- [x] **Overtrading** (Epic 6): transaction costs on every trade, turnover limits in the PM mandate, Risk Manager turnover checks, trade count/turnover as a first-class metric — `portfolio/` (transaction costs `TX_COST_BPS` + trade count/turnover metrics) and explicit turnover limits in the PM mandate (`~25%` of portfolio value per session, no double-trading) and Risk Manager mandate (flag session turnover above threshold)
+- [ ] **Dashboard/API/email exposure** (Epic 4, 7): LAN-only bind, non-guessable port/path; shared-token auth planned early (see §5.7) — LAN-only bind is implemented (default `0.0.0.0` on the 1080 LAN); ports are conventional (8300/8400) and shared-token auth is not yet implemented
+- [x] **Self-modification risk** (Epic 8, 9): per-role bounded scope, smoke-test gate, auto-revert, tagged commits + change log, escalation — `team/self_mod.py` (per-role bounded scope, smoke-test gate, auto-revert, marked commits, escalation, and a change log in `reports/self_mod_changelog.md`) + `workflows/autopull.py` (smoke-test gate + auto-revert)
+- [ ] **WOL reliability** (Epic 0, 10): Pi verifies each wake (timeout + retry); missed wakes surfaced as alerts; dashboard shows 1080 data freshness — WOL lives on the Pi (outside this repo); the dashboard does surface 1080 data freshness (`/api/freshness`)

@@ -171,6 +171,7 @@ def create_app() -> FastAPI:
             "quality_report_at": (q or {}).get("generated_at"),
             "team_runtime_4090": fourzero,
             "pipeline": _pipeline_state(),
+            "disk_usage": _disk_usage(),
         }
 
     @app.get("/api/decisions")
@@ -191,6 +192,22 @@ def _pipeline_state() -> dict:
     try:
         return json.loads(p.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
+        return {"available": False}
+
+
+def _disk_usage() -> dict:
+    import shutil
+
+    try:
+        du = shutil.disk_usage(config.REPO_ROOT)
+        return {
+            "available": True,
+            "path": str(config.REPO_ROOT),
+            "total_gb": round(du.total / 1e9, 2),
+            "used_gb": round(du.used / 1e9, 2),
+            "free_gb": round(du.free / 1e9, 2),
+        }
+    except Exception:
         return {"available": False}
 
 

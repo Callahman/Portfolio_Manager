@@ -124,8 +124,19 @@ def write_markdown(session_id: str) -> Path | None:
     return p
 
 
-def record_decision(session_id: str, recommendation: dict, result: dict | None) -> None:
-    entry = {"ts": time.time(), "session_id": session_id, "recommendation": recommendation, "result": result}
+def record_decision(session_id: str, recommendation: dict, result: dict | None,
+                    feeds_as_of: dict | None = None, portfolio_baseline: dict | None = None) -> None:
+    entry = {
+        "ts": time.time(),
+        "session_id": session_id,
+        "recommendation": recommendation,
+        "result": result,
+        # the feeds those pods consumed, snapshot-stamped (Epic 7.5)
+        "feeds_as_of": feeds_as_of,
+        # paper-portfolio state at decision time; the subsequent P&L impact is
+        # the delta from this baseline to the current metrics (Epic 7.5)
+        "portfolio_baseline": portfolio_baseline,
+    }
     with JOURNAL_PATH.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     _write_journal_md()
@@ -161,6 +172,17 @@ def _write_journal_md() -> None:
             md.append(f"- result: ERROR {result['error']}")
         else:
             md.append(f"- result: HTTP {result.get('status_code')} — {json.dumps(result.get('body', {}))[:300]}")
+        feeds_as_of = e.get("feeds_as_of")
+        if feeds_as_of:
+            stamps = ", ".join(f"{r}:{v}" for r, v in feeds_as_of.items() if v)
+            if stamps:
+                md.append(f"- feeds consumed: {stamps}")
+        baseline = e.get("portfolio_baseline") or {}
+        if baseline.get("available"):
+            md.append(
+                f"- P&L baseline: total {baseline.get('total')} "
+                f"(cum {baseline.get('cumulative_return_pct')}%) at {baseline.get('as_of')}"
+            )
         md.append("")
     JOURNAL_MD.write_text("\n".join(md), encoding="utf-8")
 

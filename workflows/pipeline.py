@@ -54,6 +54,34 @@ def _write_state(state: dict) -> None:
     STATE_PATH.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
+def _prior_state() -> dict | None:
+    if not STATE_PATH.exists():
+        return None
+    try:
+        return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+
+
+def _resume_stages() -> list[str] | None:
+    """Return the stage names to skip (already completed ok in a prior
+    same-day halted run), or None if there is nothing to resume from.
+
+    This makes the pipeline resumable: a failed run restarted on the same day
+    picks up from the last completed stage instead of re-running everything.
+    """
+    prior = _prior_state()
+    if not prior or prior.get("status") != "failed":
+        return None
+    if prior.get("day") != _day():
+        return None  # only resume same-day halted runs
+    completed = [s["name"] for s in prior.get("stages", []) if s.get("status") == "ok"]
+    if not completed:
+        return None
+    log.info("resuming same-day halted run; skipping completed stages: %s", ", ".join(completed))
+    return completed
+
+
 def _run_deliver() -> int:
     from delivery import email, report
 
@@ -95,6 +123,7 @@ def _run_archive() -> int:
 def run(stages: list[str] | None = None) -> int:
     config.load_env()
     selected = [s for s, _ in STAGES if stages is None or s in stages]
+    resume = _resume_stages() if stages is None else None
     state = {
         "started_at": time.time(),
         "day": _day(),
@@ -103,10 +132,20 @@ def run(stages: list[str] | None = None) -> int:
         "current_stage": None,
         "error": "",
         "finished_at": None,
+        "resumed": bool(resume),
     }
     _write_state(state)
     for name, cmd in STAGES:
         if name not in selected:
+            continue
+        if resume and name in resume:
+            state["stages"].append({
+                "name": name, "status": "ok", "exit_code": 0, "error": "",
+                "resumed_from_prior_run": True,
+                "started_at": time.time(), "finished_at": time.time(),
+            })
+            _write_state(state)
+            log.info("skipping stage %s (completed in prior run)", name)
             continue
         state["current_stage"] = name
         _write_state(state)

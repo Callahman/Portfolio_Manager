@@ -63,6 +63,26 @@ FIX_SCHEMA = {
 }
 
 ESCALATION_PATH = config.HISTORY_DIR / "self_mod" / "escalations.json"
+CHANGELOG_PATH = config.REPORTS_DIR / "self_mod_changelog.md"
+
+
+def _log_change(role: str, out: dict, paths: list[str], commit: str) -> None:
+    """Append a self-mod change to the change log in reports/ (Epic 9)."""
+    ts = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
+    entry = (
+        f"## {ts} — {role}\n"
+        f"- summary: {out.get('summary', '(none)')}\n"
+        f"- changed: {', '.join(paths)}\n"
+        f"- rationale: {out.get('rationale', '(none)')}\n"
+        f"- risk: {out.get('risk', '(none)')}\n"
+        f"- commit: {commit}\n\n"
+    )
+    try:
+        CHANGELOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with CHANGELOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(entry)
+    except Exception as e:
+        log.warning("could not write self-mod change log: %s", e)
 
 
 def _git(*args: str) -> str:
@@ -175,6 +195,8 @@ def _fix_group(prefix: str, failures: list[dict], api_base: str | None, dry_run:
         raise RuntimeError(f"smoke test failed after {role}'s fix — reverted")
     _git("add", "-A", "collect", "validate", "analyze")
     _git("commit", "-m", f"self-mod ({role}): {out.get('summary', 'fix')[:120]}")
+    commit = _git("rev-parse", "HEAD")
+    _log_change(role, out, [c["path"] for c in changes], commit)
     try:
         _git("push")
         log.info("%s fix committed and pushed: %s", role, [c["path"] for c in changes])
