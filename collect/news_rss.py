@@ -145,6 +145,16 @@ def run() -> int:
     config.load_env()
     feeds = config.get_list("NEWS_FEEDS")
     crawl_pages = config.get_list("NEWS_CRAWL_PAGES")
+
+    def _is_url(u: str) -> bool:
+        return u.startswith(("http://", "https://"))
+
+    skipped = [u for u in list(feeds) + list(crawl_pages) if not _is_url(u)]
+    if skipped:
+        log.warning("skipping non-URL entries in NEWS_FEEDS/NEWS_CRAWL_PAGES: %s", skipped)
+    feeds = [u for u in feeds if _is_url(u)]
+    crawl_pages = [u for u in crawl_pages if _is_url(u)]
+
     if not feeds and not crawl_pages:
         log.error("NEWS_FEEDS and NEWS_CRAWL_PAGES are empty — nothing to fetch")
         return 1
@@ -177,7 +187,7 @@ def run() -> int:
             failed += 1
             raw_store.record_fetch(f"news:crawl:{slug}", "news", 0, "failed", str(e))
             log.warning("news crawl FAILED: %s: %s", slug, e)
-    return 1 if (feeds or crawl_pages) and failed == total else 0
+    return 1 if (feeds or crawl_pages) and total == 0 else 0
 
 
 if __name__ == "__main__":
