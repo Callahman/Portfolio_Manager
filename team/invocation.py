@@ -87,6 +87,21 @@ def build_prompt(
 
 # ------------------------------------------------------------- generation ---
 
+def _result_text(result) -> str:
+    """Normalize a koboldcpp result to the completion string. Builds differ:
+    most return a plain string, some wrap it in an object (e.g. {"text": ...})."""
+    if isinstance(result, str):
+        return result
+    if isinstance(result, dict):
+        for key in ("text", "completion", "output", "result"):
+            val = result.get(key)
+            if isinstance(val, str):
+                return val
+        log.warning("unexpected koboldcpp result object — using str(): %s", result)
+        return str(result)
+    return str(result)
+
+
 def generate(prompt: str, schema: dict | None, max_length: int = DEFAULT_MAX_LENGTH) -> str:
     """One completion from koboldcpp. Tries JSON mode (json_schema) first when
     a schema is given; falls back to plain generation if the server rejects
@@ -107,7 +122,7 @@ def generate(prompt: str, schema: dict | None, max_length: int = DEFAULT_MAX_LEN
             results = r.json().get("results") or []
             if not results:
                 raise ValueError("koboldcpp returned empty results")
-            return results[0]
+            return _result_text(results[0])
         except requests.HTTPError as e:
             last = e
             if extra and e.response is not None and e.response.status_code == 400:
