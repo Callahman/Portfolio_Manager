@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
 from common import config
+from common import runtime as cruntime
 from collect import raw_store
 from validate import quality as vquality
 from common import failures as cf
@@ -153,7 +154,13 @@ def create_app() -> FastAPI:
         pipeline state, quality-report age."""
         q = vquality.load_report()
         fourzero: dict = {}
-        url = (config.get("TEAM_RUNTIME_HEALTH_URL") or "").strip()
+        # prefer the 4090's live self-registration (ad-hoc IP); fall back to the static .env URL
+        url = ""
+        reg = cruntime.load_registration()
+        if reg and reg.get("health_url"):
+            url = str(reg["health_url"]).strip()
+        if not url:
+            url = (config.get("TEAM_RUNTIME_HEALTH_URL") or "").strip()
         if url:
             try:
                 r = requests.get(url, timeout=5)
@@ -165,7 +172,7 @@ def create_app() -> FastAPI:
             except Exception as e:
                 fourzero = {"reachable": False, "url": url, "error": str(e)}
         else:
-            fourzero = {"reachable": None, "note": "TEAM_RUNTIME_HEALTH_URL not set"}
+            fourzero = {"reachable": None, "note": "no 4090 health URL (await /register or set TEAM_RUNTIME_HEALTH_URL)"}
         return {
             "api": {"status": "ok"},
             "quality_report_at": (q or {}).get("generated_at"),

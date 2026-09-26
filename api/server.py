@@ -4,8 +4,9 @@ GET  /feeds/{role}   per-role bounded feeds
 GET  /quality        data quality report
 GET  /failures       structured failure reports
 GET  /history        conversation history (rolling window)
-POST /recommendation the ONLY write: apply a team recommendation to the
-                      paper portfolio and trigger delivery
+POST /recommendation write: apply a team recommendation to the paper
+                      portfolio and trigger delivery
+POST /register       write: the 4090 announces its team-runtime health URL
 
 Bind: API_HOST/API_PORT (default 0.0.0.0:8400, LAN).
 
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     app.include_router(routes.history.router)
     app.include_router(routes.metrics.router)
     app.include_router(routes.recommendation.router)
+    app.include_router(routes.register.router)
 
     @app.get("/health")
     def health() -> dict:

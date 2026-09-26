@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -22,6 +23,49 @@ LAST_SESSION = {"ts": None, "session_id": None, "status": None}
 
 def record_session(session_id: str, status: str) -> None:
     LAST_SESSION.update(ts=time.time(), session_id=session_id, status=status)
+
+
+def lan_ip() -> str:
+    """Determine this host's LAN IP (UDP connect trick; no data is sent)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            return ""
+    finally:
+        s.close()
+
+
+def self_register(port: int) -> None:
+    """Announce this team runtime to the 1080 (best-effort; never blocks).
+
+    The 4090 is strictly ad-hoc (no schedule, no static IP), so it reports its
+    own LAN IP to the 1080's POST /register on startup. A failed registration
+    only logs — the health server still runs.
+    """
+    base = (config.get("FEED_API_BASE") or "").strip()
+    if not base:
+        log.info("FEED_API_BASE not set — skipping self-registration")
+        return
+    ip = lan_ip()
+    if not ip:
+        log.warning("could not determine LAN IP — skipping self-registration")
+        return
+    health_url = f"http://{ip}:{port}/health"
+    try:
+        import requests
+
+        r = requests.post(f"{base}/register", json={"ip": ip, "health_url": health_url}, timeout=10)
+        if r.ok:
+            log.info("registered team runtime %s with 1080 (%s)", health_url, base)
+        else:
+            log.warning("self-registration failed: HTTP %d (%s)", r.status_code, r.text[:200])
+    except Exception as e:  # noqa: BLE001
+        log.warning("self-registration failed: %s", e)
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -52,6 +96,7 @@ def main() -> int:
     config.load_env()
     host = config.get("TEAM_HEALTH_HOST", "0.0.0.0") or "0.0.0.0"
     port = config.get_int("TEAM_HEALTH_PORT", 8500)
+    self_register(port)
     log.info("team-runtime health on %s:%d", host, port)
     HTTPServer((host, port), _Handler).serve_forever()
     return 0
