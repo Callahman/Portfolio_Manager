@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 
 from common import config
 from common import history as chist
-from team import context, invocation, pods
+from team import context, invocation, pods, roles as team_roles
 
 log = logging.getLogger(__name__)
 
@@ -53,56 +53,46 @@ def run(rounds: int = 3, roles: list[str] | None = None, session_id: str | None 
         return 1
 
     # 1. fetch feeds (only for the roles in this session)
-    feed_roles = roles or pods.ALL_ROLES
-    feeds = {}
+    feed_roles = roles or team_roles.all_roles()
+    feeds: dict[str, dict] = {}
     for role in feed_roles:
-        f = invocation.fetch_feed(role, base)
-        if f is not None:
-            feeds[role] = f
+        try:
+            f = invocation.fetch_feed(role, base)
+            if f is not None:
+                feeds[role] = f
+        except Exception as e:
+            log.warning("feed fetch failed for %s: %s", role, e)
     if not feeds:
         log.error("could not fetch any feeds from %s", base)
         return 1
 
-    # 2. form pods
+    # 2. form pods (Team Lead decides; deterministic chunking fallback)
     available = list(feeds.keys())
     if roles:
-        pod_groups = [roles]  # a single ad-hoc pod of the chosen roles
+        pod_groups = pods.chunk_roles(roles)  # a single ad-hoc pod of the chosen roles
     else:
-        pods_payload = {r: {"feed": f} for r, f in feeds.items()}
-        decision = invocation.invoke("team_lead", pods_payload, base, agenda=agenda)
-        if decision is None:
+        pod_groups = pods.form_pods(available, api_base=base)
+        if not pod_groups:
             pod_groups = pods.chunk_roles(available)
-        else:
-            pod_groups = pods.form_pods(decision.get("pods", []), available)
-            if not pod_groups:
-                pod_groups = pods.chunk_roles(available)
 
-    # 3. deliberation rounds (bounded; close on convergence or deadlock)
+    # 3. deliberation rounds (bounded; close on deadlock)
     digests: list[dict] = []
     prev_summary: str | None = None
     closed_early = False
     for rnd in range(1, rounds + 1):
-        rnd_digest = {"round": rnd, "pods": []}
+        rnd_entries: list[dict] = []
+        context_str = agenda
         for pod in pod_groups:
-            speaker = pod[0]
-            entry = invocation.invoke(
-                speaker, feeds, base, agenda=agenda,
-                phase={"round": rnd, "pod": pod, "prior_pods": rnd_digest["pods"]},
-            )
-            if entry is None:
-                continue
-            entry["round"] = rnd
-            entry["pod"] = pod
-            rnd_digest["pods"].append(entry)
-            digests.append(entry)
-        summary = context.summarize_round(rnd_digest)
-        log.info("round %d: %d pod entries; %s", rnd, len(rnd_digest["pods"]), summary[:120])
+            pod = pods.run_pod(pod, agenda=agenda, context=context_str, api_base=base)
+            decision = pod.decision or {}
+            digests.append({"round": rnd, "pod": pod.name, "roles": pod.roles, "decision": decision})
+            rnd_entries.append({"role": pod.name, "content": {"summary": decision.get("decision", "")}})
+            if decision.get("decision"):
+                context_str = f"{context_str}\n\nPOD {pod.name} DECISION: {decision['decision']}"
+        summary = context.summarize_round(rnd_entries)
+        log.info("round %d: %d pods; %s", rnd, len(rnd_entries), summary[:120])
         if prev_summary is not None and summary == prev_summary:
-            log.warning("deadlock detected at round %d (identical round summaries) — closing", rnd)
-            closed_early = True
-            break
-        if context.round_converges(summary, rnd_digest):
-            log.info("round %d converged — closing deliberation early", rnd)
+            log.warning("deadlock detected at round %d — closing", rnd)
             closed_early = True
             break
         prev_summary = summary
@@ -111,22 +101,24 @@ def run(rounds: int = 3, roles: list[str] | None = None, session_id: str | None 
     synthesis_fallback = False
     final_rec: list = []
     final_rationale = ""
-    pm = invocation.invoke("portfolio_manager", feeds, base, agenda=agenda, phase={"final": True})
-    if pm is not None:
-        final_rec = pm.get("allocation_actions", [])
-        final_rationale = pm.get("rationale", "")
-    else:
-        lead = invocation.invoke("team_lead", feeds, base, agenda=agenda, phase={"final": True})
-        if lead is not None:
-            final_rec = lead.get("actions", [])
-            final_rationale = lead.get("rationale", "")
-        else:
+    final_extra = "PHASE: final synthesis. Produce the final portfolio recommendation."
+    try:
+        pm = invocation.invoke_role("portfolio_manager", api_base=base, extra_instructions=final_extra)
+        final_rec = pm["output"].get("allocation_actions", []) or pm["output"].get("actions", [])
+        final_rationale = pm["output"].get("rationale", "") or pm["output"].get("summary", "")
+    except Exception as e:
+        log.warning("portfolio_manager final synthesis failed: %s", e)
+        try:
+            lead = invocation.invoke_role("team_lead", api_base=base, extra_instructions=final_extra)
+            final_rec = lead["output"].get("actions", []) or lead["output"].get("allocation_actions", [])
+            final_rationale = lead["output"].get("rationale", "") or lead["output"].get("summary", "")
+        except Exception as e2:
+            log.warning("team_lead final synthesis failed: %s", e2)
             synthesis_fallback = True
             final_rationale = (
                 "Final synthesis unavailable (Portfolio Manager and Team Lead "
                 "both failed). Conservative hold: no trades this round."
             )
-            log.warning("final synthesis failed — using conservative hold fallback")
 
     # 5. record the transcript (per-pod JSONL + markdown)
     as_of = next(iter(feeds.values())).get("as_of")
@@ -134,7 +126,7 @@ def run(rounds: int = 3, roles: list[str] | None = None, session_id: str | None 
         "session_id": sid,
         "kind": "adhoc" if roles else "full",
         "roles": available,
-        "pods": pod_groups,
+        "pods": [p.name for p in pod_groups],
         "rounds_run": len({d.get("round") for d in digests}),
         "closed_early": closed_early,
         "synthesis_fallback": synthesis_fallback,
