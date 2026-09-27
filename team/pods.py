@@ -99,28 +99,54 @@ def form_pods(available_roles: list[str], api_base: str | None = None) -> list[P
         return chunk_roles(available_roles)
 
 
+def _pod_history(pod: Pod) -> str:
+    """Render the pod's conversation so far (each prior speaker's key output),
+    so the next speaker can actually build on what was said."""
+    lines = []
+    for entry in pod.entries:
+        content = entry.get("content")
+        if isinstance(content, dict):
+            text = content.get("summary") or content.get("recommendation") or ""
+        elif isinstance(content, str):
+            text = content
+        else:
+            text = ""
+        if text:
+            lines.append(f"{entry.get('role', '?')}: {text}")
+    return "\n".join(lines) if lines else "(no prior speakers yet)"
+
+
 def run_pod(pod: Pod, *, agenda: str, context: str, api_base: str | None = None) -> Pod:
-    """One pod turn: each role speaks in the shared pod conversation, then the
-    pod lead (first role) synthesizes the pod decision."""
+    """One pod turn: each role speaks in the shared pod conversation (seeing the
+    prior speakers' contributions), then the pod lead (first role) synthesizes
+    the pod decision."""
     for i, role in enumerate(pod.roles):
-        extra = (
-            f"PHASE: pod deliberation, pod {pod.name}, speaker {i + 1}/{len(pod.roles)} "
-            f"of this round. You are speaking in a shared pod conversation with: "
-            f"{', '.join(pod.roles)}. Build on what your pod-mates said; do not repeat "
-            f"them. Speak only within your mandate.\n\nSESSION CONTEXT:\n{context}"
-        )
+        if i == 0:
+            extra = (
+                f"PHASE: pod deliberation, pod {pod.name}. You are the FIRST speaker "
+                f"in this pod. Open the discussion within your mandate.\n\nSESSION CONTEXT:\n{context}"
+            )
+        else:
+            history = _pod_history(pod)
+            extra = (
+                f"PHASE: pod deliberation, pod {pod.name}, speaker {i + 1}/{len(pod.roles)}. "
+                f"You are speaking in a shared pod conversation with: {', '.join(pod.roles)}. "
+                f"Build on what your pod-mates said; do not repeat them. Speak only within "
+                f"your mandate.\n\nPOD CONVERSATION SO FAR:\n{history}\n\nSESSION CONTEXT:\n{context}"
+            )
         try:
             res = invocation.invoke_role(role, api_base=api_base, extra_instructions=extra)
             pod.add_entry(role, res["output"])
         except Exception as e:
             log.error("role %s failed in pod %s: %s", role, pod.name, e)
             pod.add_entry(role, {"summary": f"(role unavailable: {e})", "error": str(e)})
-    # pod decision: the lead synthesizes
+    # pod decision: the lead synthesizes from the full conversation
     lead = pod.roles[0]
+    history = _pod_history(pod)
     extra = (
         f"PHASE: pod decision. You are the lead of pod {pod.name}. Synthesize the "
-        f"pod's decision from the pod conversation. Put the decision in your "
-        f"`recommendation` field and the synthesis in `summary`."
+        f"pod's decision from the pod conversation below. Put the decision in your "
+        f"`recommendation` field and the synthesis in `summary`.\n\nPOD CONVERSATION:\n{history}"
     )
     try:
         res = invocation.invoke_role(lead, api_base=api_base, extra_instructions=extra)

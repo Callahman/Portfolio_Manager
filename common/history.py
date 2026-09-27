@@ -112,6 +112,15 @@ def write_markdown(session_id: str) -> Path | None:
             md.append(f"- meta: {json.dumps(e.get('meta', {}))}")
             md.append("")
             continue
+        if e.get("type") == "session_final":
+            final = e.get("final", {})
+            md.append("## Final recommendation")
+            md.append("")
+            md.append(f"- rationale: {final.get('rationale', '(none)')}")
+            for a in final.get("recommendation", []) or []:
+                md.append(f"  - {a.get('side')} {a.get('shares')} {a.get('ticker')} — {a.get('rationale', '')}")
+            md.append("")
+            continue
         pod = e.get("pod", "-")
         role = e.get("role", "?")
         rnd = e.get("round")
@@ -122,6 +131,14 @@ def write_markdown(session_id: str) -> Path | None:
     p = SESSIONS_DIR / f"{session_id}.md"
     p.write_text("\n".join(md), encoding="utf-8")
     return p
+
+
+def finalize_session(session_id: str, final: dict | None = None) -> Path | None:
+    """Close out a session: append the final recommendation (if any) as a
+    `session_final` entry, then regenerate the markdown mirror."""
+    if final:
+        append_entry(session_id, {"type": "session_final", "session_id": session_id, "final": final, "ts": time.time()})
+    return write_markdown(session_id)
 
 
 def record_decision(session_id: str, recommendation: dict, result: dict | None,
