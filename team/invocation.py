@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 DEFAULT_KOBOLDCPP_URL = "http://localhost:5001"
 GENERATE_TIMEOUT_S = 300
 TEMPERATURE = 0.4
-DEFAULT_MAX_LENGTH = 1024
+DEFAULT_MAX_LENGTH = 2048
 
 
 class InvocationError(RuntimeError):
@@ -76,8 +76,13 @@ def build_prompt(
         f"- Every finding must cite its evidence as a feed field path "
         f"(e.g. assets[0].change_1d_pct).\n"
         f"- If the feed is missing, stale, or has gaps, say so — do not paper over it.\n"
-        f"- Respond with ONLY one JSON object matching the schema. "
-        f"No prose, no markdown fences.\n"
+        f"- Respond with EXACTLY one valid JSON object. No prose, no markdown "
+        f"fences, no trailing commas, no comments.\n"
+        f"- Use EXACTLY the field names in the schema (e.g. `point`, not `path`); "
+        f"no extra or renamed fields.\n"
+        f"- Keep each finding to ONE sentence to stay within the token budget.\n"
+        f"- If you run low on space, stop after the last COMPLETE field — never "
+        f"leave an object or array open.\n"
         f"{phase}\n"
         f"SCHEMA:\n{schema_json}\n\n"
         f"FEED:\n{feed_json}\n\n"
